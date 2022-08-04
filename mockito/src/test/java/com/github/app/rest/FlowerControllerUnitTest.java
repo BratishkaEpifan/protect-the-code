@@ -25,6 +25,22 @@ import com.github.domain.service.FlowerService;
 */
 @RunWith(MockitoJUnitRunner.class)
 public class FlowerControllerUnitTest {
+    @Mock
+    private FlowerService flowerService;
+    @InjectMocks
+    private FlowerController flowerController;
 
-    
+    @Test
+    public void isAFlower() {
+        when(flowerService.analize(eq("Diascia"))).thenReturn("Flower");
+        String flower = flowerController.isAFlower("Diascia");
+        Assert.assertEquals("Flower", flower);
+    }
+    @Test
+    public void isABigFlower() {
+        when(flowerService.isABigFlower(eq("Diascia"), anyInt())).thenReturn(true);
+        Flower flower = new Flower("Diascia", 228);
+        Boolean response = flowerController.isABigFlower(flower);
+        Assert.assertTrue(response);
+    }
 }

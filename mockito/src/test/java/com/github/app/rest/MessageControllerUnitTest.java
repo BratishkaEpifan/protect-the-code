@@ -24,6 +24,27 @@ import com.github.domain.util.MessageMatcher;
 */
 @RunWith(MockitoJUnitRunner.class)
 public class MessageControllerUnitTest {
+    @Mock
+    private MessageService messageService;
 
+    @InjectMocks
+    private MessageController messageController;
+
+    @Test
+    public void createMessage_NewMessage_OK() {
+        MessageApi messageApi = new MessageApi();
+        messageApi.setFrom("User");
+        messageApi.setTo("Adressee");
+        messageApi.setText("lox");
+
+        messageController.createMessage(messageApi);
+
+        Message message = new Message();
+        message.setFrom("User");
+        message.setTo("Adressee");
+        message.setText("lox");
+
+        Mockito.verify(messageService, times(1)).deliverMessage(ArgumentMatchers.argThat(new MessageMatcher(message)));
+    }
     
 }
