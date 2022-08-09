@@ -69,6 +69,25 @@ class ServerIntegrationTests {
     void createOrder() {
         // TODO: протестируйте успешное создание заказа на 100 евро
         // используя webClient
+        OrderRequest orderRequest = new OrderRequest();
+        MonetaryAmount monetaryAmount =
+                Monetary.getDefaultAmountFactory().setCurrency("EUR").setNumber(BigDecimal.valueOf(100)).create();
+        orderRequest.setAmount(monetaryAmount);
+        try {
+        webClient.post().uri("/order")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(BodyInserters.fromValue(orderRequest))
+                .exchange()
+                .expectStatus().isCreated();
+            FluxExchangeResult<Order> fluxExchangeResult = webClient.get().uri("/order/1")
+                    .accept(MediaType.APPLICATION_JSON)
+                    .exchange().expectStatus().isOk()
+                    .returnResult(Order.class);
+            Order order = fluxExchangeResult.getResponseBody().blockFirst();
+            assertThat(order.getAmount()).isEqualTo(BigDecimal.valueOf(100.0));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
@@ -76,6 +95,37 @@ class ServerIntegrationTests {
         // TODO: протестируйте успешную оплату ранее созданного заказа валидной картой
         // используя webClient
         // Получите `id` заказа из базы данных, используя orderRepository
+        try {
+            OrderRequest orderRequest = new OrderRequest();
+            MonetaryAmount monetaryAmount =
+                    Monetary.getDefaultAmountFactory().setCurrency("EUR").setNumber(BigDecimal.valueOf(100)).create();
+            orderRequest.setAmount(monetaryAmount);
+            webClient.post().uri("/order")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(BodyInserters.fromValue(orderRequest))
+                    .exchange()
+                    .expectStatus().isCreated();
+            String creditCard = "4414 4228 1488 0228";
+            PaymentRequest paymentRequest = new PaymentRequest(creditCard);
+            EntityExchangeResult<PaymentResponse> entityExchangeResult = webClient.post().uri("/order/2/payment")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(BodyInserters.fromValue(paymentRequest))
+                    .exchange()
+                    .expectStatus().isCreated()
+                    .expectBody(PaymentResponse.class)
+                    .returnResult();
+            PaymentResponse paymentResponse = entityExchangeResult.getResponseBody();
+            assertThat(paymentResponse).isNotNull();
+            Order order = orderRepository.findById(2L).orElse(null);
+            assert order != null;
+            assertThat(paymentResponse.getOrderId()).isEqualTo(order.getId());
+            assertThat(order.isPaid()).isEqualTo(true);
+            Payment payment = paymentRepository.findByOrderId(2L).orElse(null);
+            assert payment != null;
+            assertThat(payment.getCreditCardNumber()).isEqualTo(paymentResponse.getCreditCardNumber());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
@@ -84,5 +134,31 @@ class ServerIntegrationTests {
         // Создайте объект Order, Payment и выполните save, используя orderRepository
         // Используйте mockWebServer для получения conversion_rate
         // Сделайте запрос через webClient
+        Order order = new Order(LocalDateTime.now(), BigDecimal.valueOf(100), true);
+        orderRepository.save(order);
+//        System.out.println(order.getId());
+        Payment payment = new Payment(order,"4414 4228 1488 0228");
+        paymentRepository.save(payment);
+        try {
+            String json = "{\"conversion_rate\": 0.5}";
+            mockWebServer.enqueue(
+                    new MockResponse().setResponseCode(200)
+                            .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                            .setBody(json)
+            );
+
+            EntityExchangeResult<Receipt> entityExchangeResult =
+                    webClient.get().uri("/order/4/receipt?currency=USD")
+                    .exchange()
+                    .expectStatus().isOk().expectBody(Receipt.class).returnResult();
+            Receipt receipt = entityExchangeResult.getResponseBody();
+            MonetaryAmount monetaryAmount =
+                    Monetary.getDefaultAmountFactory().setCurrency("USD").setNumber(BigDecimal.valueOf(50.00)).create();
+            assert receipt != null;
+            assertThat(receipt.getAmount()).isEqualTo(monetaryAmount);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
     }
 }
